@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quizz Cartes</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,900;1,9..144,600&family=Karla:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Barre du haut -->
+  <header class="topbar">
+    <span class="who" id="who"></span>
+    <nav class="topnav">
+      <a href="#" id="nav-cards" class="hidden">Les cartes</a>
+      <a href="#" id="nav-quiz" class="hidden">Le quizz</a>
+      <a href="#" id="nav-admin" class="hidden">Espace manager</a>
+      <a href="#" id="nav-logout" class="hidden">Se déconnecter</a>
+    </nav>
+  </header>
+  <div id="demo-banner" class="notice hidden">
+    <b>Mode démonstration.</b> La connexion Microsoft 365 n'est pas encore configurée : tout reste dans ce navigateur, rien n'est envoyé nulle part.
+  </div>
+
+  <div class="masthead">
+    <div class="eyebrow" id="mast-eyebrow">Formation service</div>
+    <div class="brand" id="mast-brand">Quizz de la carte</div>
+    <div class="tag" id="mast-tag">DONNA · MAMIE FADA — entraîne-toi avant le service</div>
+    <div class="rule"></div>
+  </div>
+
+  <!-- ============ CHARGEMENT / ERREUR ============ -->
+  <section id="view-loading" class="stack">
+    <div class="card center"><div class="meta-line" id="loading-text">Chargement…</div></div>
+  </section>
+
+  <!-- ============ CONNEXION ============ -->
+  <section id="view-login" class="stack hidden">
+    <div class="card stack center">
+      <h2>Bienvenue</h2>
+      <p class="meta-line">Connecte-toi avec ton compte du groupe (prenom@…) pour t'entraîner. Ta progression est personnelle : personne d'autre que les managers ne la voit.</p>
+      <div class="btn-row center-row"><button class="btn" id="login-btn">Se connecter avec Microsoft</button></div>
+    </div>
+  </section>
+
+  <!-- ============ DÉMO : PRÉNOM ============ -->
+  <section id="view-demo-name" class="stack hidden">
+    <div class="card stack">
+      <h2>Qui joue ?</h2>
+      <p class="meta-line">En mode démo, indique juste un prénom pour enregistrer ta progression dans ce navigateur.</p>
+      <div class="fill-row">
+        <input type="text" id="demo-name-input" placeholder="Ton prénom" autocomplete="off">
+        <button class="btn" id="demo-name-btn">Continuer</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAS DE CARTES ============ -->
+  <section id="view-nocards" class="stack hidden">
+    <div class="card stack center">
+      <h2>Les cartes arrivent bientôt</h2>
+      <p class="meta-line">Aucune carte n'a encore été publiée par un manager. Reviens un peu plus tard !</p>
+    </div>
+  </section>
+
+  <!-- ============ ÉTUDIANT : ACCUEIL ============ -->
+  <section id="screen-home" class="stack hidden">
+    <div class="card stack">
+      <div>
+        <span class="section-label">1. Restaurant</span>
+        <div class="choice-grid" id="pick-restaurant">
+          <button class="choice" data-preview="donna" data-val="donna"><span class="t">DONNA</span><span class="d">Carte italienne, cocktails &amp; cave</span></button>
+          <button class="choice" data-preview="mamiefada" data-val="mamiefada"><span class="t">Mamie Fada</span><span class="d">Bistrot, cave &amp; bar de Papi</span></button>
+          <button class="choice" data-val="mixed"><span class="t">Mélangé</span><span class="d">Questions des deux maisons</span></button>
+        </div>
+      </div>
+      <div>
+        <span class="section-label">2. Mode</span>
+        <div class="choice-grid" id="pick-mode">
+          <button class="choice" data-val="facile"><span class="t">Facile</span><span class="d">QCM carte + Vrai/Faux règlement</span></button>
+          <button class="choice" data-val="complet"><span class="t">Complet</span><span class="d">Facile + compléter la sauce/garniture</span></button>
+          <button class="choice" data-val="allergenes"><span class="t">Allergènes</span><span class="d">Grilles de 4 plats à cocher, groupées par entrée / plat / dessert</span></button>
+          <button class="choice" data-val="vins"><span class="t">Vins</span><span class="d">Cépages, régions &amp; profils sensoriels de la cave</span></button>
+        </div>
+      </div>
+      <div class="btn-row"><button class="btn" id="start-btn" disabled>Commencer le quizz</button></div>
+      <div class="meta-line" id="home-hint">Choisis un restaurant et un mode pour commencer.</div>
+      <div id="progress-panel" class="hidden">
+        <span class="section-label">Ta progression sur ce mode</span>
+        <div class="progress-track"><div class="progress-fill" id="home-progress-fill" style="width:0%"></div></div>
+        <div class="meta-line" id="home-progress-text">—</div>
+      </div>
+      <div id="save-error" class="notice bad hidden">Ta dernière partie n'a pas pu être enregistrée (connexion ?). Elle sera renvoyée automatiquement à la prochaine partie.</div>
+    </div>
+  </section>
+
+  <!-- ============ ÉTUDIANT : PARTIE ============ -->
+  <section id="screen-game" class="stack hidden">
+    <div class="card">
+      <div class="hud">
+        <span class="progress-label" id="progress-label">Question 1 / 10</span>
+        <span class="score"><span id="score-val">0</span> pts</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="q-kicker" id="q-kicker"></div>
+      <div class="question" id="question-text">—</div>
+      <div id="question-body"></div>
+      <div class="feedback" id="feedback"></div>
+    </div>
+    <div class="btn-row" style="justify-content:flex-end;">
+      <button class="btn secondary hidden" id="quit-btn">Quitter</button>
+      <button class="btn hidden" id="next-btn">Question suivante</button>
+    </div>
+  </section>
+
+  <!-- ============ ÉTUDIANT : RÉSULTAT ============ -->
+  <section id="screen-result" class="stack hidden">
+    <div class="card">
+      <div class="result-score" id="result-score">0 pts</div>
+      <div class="result-sub" id="result-sub">—</div>
+      <div class="breakdown" id="result-breakdown"></div>
+      <div class="miss-list" id="miss-list"></div>
+      <div class="btn-row center-row" style="margin-top:24px;">
+        <button class="btn" id="replay-btn">Rejouer</button>
+        <button class="btn secondary" id="home-btn">Changer de mode</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONSULTER LES CARTES ============ -->
+  <section id="view-cards" class="stack hidden">
+    <div class="card stack">
+      <div class="choice-grid" id="cards-pick">
+        <button class="choice" data-preview="donna" data-val="donna"><span class="t">DONNA</span></button>
+        <button class="choice" data-preview="mamiefada" data-val="mamiefada"><span class="t">Mamie Fada</span></button>
+      </div>
+      <div class="choice-grid" id="cards-tab">
+        <button class="choice" data-val="dishes"><span class="t">Plats</span></button>
+        <button class="choice" data-val="drinks"><span class="t">Boissons</span></button>
+        <button class="choice" data-val="wines"><span class="t">Vins</span></button>
+        <button class="choice" data-val="vf"><span class="t">Règlement</span></button>
+      </div>
+      <input type="search" id="cards-search" class="search" placeholder="Rechercher un plat, un ingrédient, un vin…">
+      <div id="cards-list"></div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN : CODE ============ -->
+  <section id="view-admin-lock" class="stack hidden">
+    <div class="card stack">
+      <h2 id="lock-title">Espace manager</h2>
+      <p class="meta-line" id="lock-help">Entre le code manager pour accéder aux progressions des équipes.</p>
+      <div class="fill-row">
+        <input type="password" id="admin-code-input" placeholder="Code manager" autocomplete="off" inputmode="numeric">
+        <button class="btn" id="admin-code-btn">Déverrouiller</button>
+      </div>
+      <div class="fill-row hidden" id="admin-code-confirm-row">
+        <input type="password" id="admin-code-confirm" placeholder="Confirme le code" autocomplete="off" inputmode="numeric">
+      </div>
+      <div class="notice bad hidden" id="lock-error"></div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN : TABLEAU DE BORD ============ -->
+  <section id="view-admin" class="stack hidden">
+    <div class="card stack">
+      <div class="admin-head">
+        <h2>Progression des équipes</h2>
+        <div class="choice-grid compact" id="admin-resto">
+          <button class="choice" data-preview="donna" data-val="donna"><span class="t">DONNA</span></button>
+          <button class="choice" data-preview="mamiefada" data-val="mamiefada"><span class="t">Mamie Fada</span></button>
+        </div>
+      </div>
+      <div class="kpis" id="admin-kpis"></div>
+      <div class="table-wrap"><table class="team" id="admin-table"></table></div>
+      <p class="meta-line">% maîtrisé = part des infos de la carte répondues juste deux fois de suite. Clique sur une personne pour voir ses points faibles.</p>
+    </div>
+
+    <div class="card stack hidden" id="admin-detail"></div>
+
+    <div class="card stack">
+      <h3>Ce que l'équipe rate le plus</h3>
+      <p class="meta-line">Les infos ratées à la dernière tentative par le plus de personnes — utile pour le briefing.</p>
+      <div id="admin-weak"></div>
+    </div>
+
+    <div class="card stack">
+      <h3>Cartes publiées</h3>
+      <div class="meta-line" id="admin-cards-info">—</div>
+      <div class="btn-row">
+        <button class="btn" id="admin-import-btn">Importer une nouvelle version des cartes</button>
+        <input type="file" id="admin-import-input" accept="application/json,.json" class="hidden">
+      </div>
+      <div class="notice hidden" id="admin-import-msg"></div>
+    </div>
+
+    <div class="card stack">
+      <h3>Réglages</h3>
+      <div class="btn-row">
+        <button class="btn secondary" id="admin-change-code">Changer le code manager</button>
+        <button class="btn secondary hidden" id="admin-demo-fill">Ajouter des équipiers fictifs (démo)</button>
+        <button class="btn secondary hidden" id="admin-demo-reset">Tout effacer (démo)</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="credit" id="footer-credit">Allergènes indicatifs — toujours confirmer avec la cuisine avant de répondre à un client.</footer>
+</div>
+
+<script src="config.js"></script>
+<script src="vendor/msal-browser.min.js"></script>
+<script src="engine.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
