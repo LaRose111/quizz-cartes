@@ -212,3 +212,14 @@ table.team tbody tr.selected{ background:var(--accent-soft); }
 
 footer.credit{ text-align:center; margin-top:26px; color:var(--muted); font-size:.78rem; }
 @media (max-width:480px){ .tf-row{ grid-template-columns:1fr; } }
+
+/* cartes nommées */
+.chip-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.chip{ border:1.5px solid var(--border); background:var(--surface); border-radius:99px; padding:6px 14px; font-size:.85rem; font-weight:700; color:var(--ink-soft); }
+.chip.active{ border-color:var(--accent); background:var(--accent-soft); color:var(--ink); }
+.carte-toggle{ display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.carte-toggle input{ width:18px; height:18px; margin-top:3px; accent-color:var(--accent); flex:0 0 auto; }
+.carte-toggle .name{ font-weight:700; }
+.carte-toggle .desc{ font-size:.85rem; color:var(--muted); }
+.resto-label{ font-family:var(--font-display); font-weight:600; font-size:1.05rem; margin-top:10px; }
+.notice ul{ margin:6px 0 0; padding-left:18px; }

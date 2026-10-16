@@ -17,7 +17,7 @@ const app = {
   selected: null,
 };
 const state = {
-  restaurant: null, mode: null, pool: [], idx: 0, score: 0, maxScore: 0,
+  restaurant: null, mode: null, carte: null, pool: [], idx: 0, score: 0, maxScore: 0,
   correctCount: 0, misses: [], answered: false, results: [], coverageBefore: null,
   cellStats: { correct:0, total:0 },
 };
@@ -138,6 +138,7 @@ function updateScopeUI(){
   [...els.pickRestaurant.children].forEach(b=>b.classList.toggle('active', b.dataset.val===state.restaurant));
   [...els.pickMode.children].forEach(b=>b.classList.toggle('active', b.dataset.val===state.mode));
   els.startBtn.disabled = !(state.restaurant && state.mode);
+  renderCartePicker();
   if(state.restaurant==='donna') setMast('DONNA', 'Carte, cocktails & cave — quizz de service');
   else if(state.restaurant==='mamiefada') setMast('Mamie Fada', 'Bistrot, cave & bar de Papi — quizz de service');
   else if(state.restaurant==='mixed') setMast('Quizz de la carte', 'DONNA & Mamie Fada mélangés');
@@ -146,18 +147,36 @@ function updateScopeUI(){
     els.progressPanel.classList.add('hidden');
     return;
   }
-  const preview = E.buildRound(app.cards.data, state.restaurant, state.mode, app.facts);
+  const preview = E.buildRound(app.cards.data, state.restaurant, state.mode, app.facts, state.carte);
   const totalPts = preview.reduce((s,q)=>s+q.points,0);
   const topic = state.mode==='allergenes' ? 'plats & allergènes (grilles de 4 plats)'
               : state.mode==='vins' ? 'cépages, régions & profils sensoriels'
-              : 'carte et règlement';
+              : state.carte ? `les plats de la carte ${state.carte}` : 'carte et règlement';
   els.homeHint.innerHTML = `Partie courte : <b>${preview.length} questions</b> sur ${topic} (score maximum : <b>${totalPts} pts</b>). Le tirage donne la priorité à ce que tu ne maîtrises pas encore.`;
-  const cov = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts);
+  const cov = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts, state.carte);
   els.progressPanel.classList.remove('hidden');
   els.homeProgressFill.style.width = cov.pct + '%';
   els.homeProgressText.innerHTML = `<b>${cov.pct}%</b> maîtrisé (${cov.mastered}/${cov.total} infos réussies deux fois de suite).`;
 }
-els.pickRestaurant.addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; state.restaurant = b.dataset.val; updateScopeUI(); });
+els.pickRestaurant.addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; state.restaurant = b.dataset.val; state.carte = null; updateScopeUI(); });
+// cartes en service ayant au moins un plat (Toutes + chaque carte), uniquement pour un restaurant précis
+function playableCartes(r){
+  if(!app.cards || !r || r==='mixed') return [];
+  const D = app.cards.data;
+  return E.activeCarteNames(D, r).filter(c=> (D[r].dishes||[]).some(d=>E.dishCarte(d)===c));
+}
+function renderCartePicker(){
+  const list = playableCartes(state.restaurant);
+  const block = $('carte-block');
+  if(list.length < 2 || state.mode==='vins'){ block.classList.add('hidden'); if(state.mode!=='vins') state.carte = null; return; }
+  if(state.carte && !list.includes(state.carte)) state.carte = null;
+  block.classList.remove('hidden');
+  const D = app.cards.data, r = state.restaurant;
+  const desc = name => { const c = E.cartesOf(D, r).find(x=>x.name===name); return c && c.desc ? c.desc : ''; };
+  $('pick-carte').innerHTML = [`<button class="choice ${!state.carte?'active':''}" data-val=""><span class="t">Toutes</span><span class="d">Toutes les cartes en service</span></button>`]
+    .concat(list.map(c=>`<button class="choice ${state.carte===c?'active':''}" data-val="${esc(c)}"><span class="t">${esc(c)}</span><span class="d">${esc(desc(c))}</span></button>`)).join('');
+}
+$('pick-carte').addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; state.carte = b.dataset.val || null; updateScopeUI(); });
 els.pickMode.addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; state.mode = b.dataset.val; updateScopeUI(); });
 els.startBtn.addEventListener('click', startRound);
 $('replay-btn').addEventListener('click', startRound);
@@ -169,8 +188,8 @@ const g = {
   feedback: $('feedback'), nextBtn: $('next-btn'), quitBtn: $('quit-btn'),
 };
 function startRound(){
-  state.coverageBefore = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts);
-  state.pool = E.buildRound(app.cards.data, state.restaurant, state.mode, app.facts);
+  state.coverageBefore = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts, state.carte);
+  state.pool = E.buildRound(app.cards.data, state.restaurant, state.mode, app.facts, state.carte);
   Object.assign(state, { idx:0, score:0, correctCount:0, misses:[], results:[], cellStats:{correct:0,total:0} });
   state.maxScore = state.pool.reduce((s,q)=>s+q.points,0);
   if(!state.pool.length){ alert('Pas assez de données pour ce quizz — essaie un autre restaurant ou mode.'); return; }
@@ -301,20 +320,21 @@ async function finishRound(){
     ? `<span class="section-label">À revoir</span>` + state.misses.map(m=>`<div class="miss-item"><b>${esc(m.text)}</b><br>${esc(m.explain)}</div>`).join('')
     : `<div class="miss-item">Sans faute — tu connais ta carte !</div>`;
   await saveRound(results);
-  const after = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts);
+  const after = E.coverage(app.cards.data, state.restaurant, state.mode, app.facts, state.carte);
   const delta = after.pct - (state.coverageBefore ? state.coverageBefore.pct : 0);
   $('result-sub').innerHTML = esc(sub) + `<br>Progression sur ce mode : <b>${after.pct}%</b> maîtrisé${delta>0 ? ` (+${delta} pt${delta>1?'s':''})` : ''}.`;
 }
 
 // ---------------------------------------------------------------- consulter les cartes
-const cardsUI = { resto:'donna', tab:'dishes', q:'' };
+const cardsUI = { resto:'donna', tab:'dishes', q:'', carte:null };
 function openCards(){
   if(!app.cards) return;
   show('view-cards');
   setMast('Les cartes', 'Consulte la carte avant de t\'entraîner', 'Révision');
   renderCards();
 }
-$('cards-pick').addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; cardsUI.resto = b.dataset.val; renderCards(); });
+$('cards-pick').addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; cardsUI.resto = b.dataset.val; cardsUI.carte = null; renderCards(); });
+$('cards-carte').addEventListener('click', e=>{ const b = e.target.closest('.chip'); if(!b) return; cardsUI.carte = b.dataset.val || null; renderCards(); });
 $('cards-tab').addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; cardsUI.tab = b.dataset.val; renderCards(); });
 $('cards-search').addEventListener('input', e=>{ cardsUI.q = e.target.value; renderCards(); });
 function renderCards(){
@@ -329,10 +349,18 @@ function renderCards(){
   if(cardsUI.tab==='vf'){
     const items = ((D.vraifaux||{})[r]||[]).filter(it=>it.isTrue && match(it));
     groups = [['Règles à retenir', items.map(it=>({ name: it.statement }))]];
+  } else if(cardsUI.tab==='dishes'){
+    const items = E.dishesInScope(D, r, cardsUI.carte).filter(match)
+      .map(d=> Object.assign({}, d, { _group: E.dishCarte(d)==='Classique' ? d.section : `${E.dishCarte(d)} — ${d.section.replace(/^Braséro — /,'')}` }));
+    groups = groupBy(items, '_group');
   } else {
     const items = (D[r][cardsUI.tab]||[]).filter(match);
-    groups = groupBy(items, cardsUI.tab==='dishes' ? 'section' : cardsUI.tab==='drinks' ? 'cat' : 'category');
+    groups = groupBy(items, cardsUI.tab==='drinks' ? 'cat' : 'category');
   }
+  const cl = playableCartes(r), chips = $('cards-carte');
+  chips.classList.toggle('hidden', cardsUI.tab!=='dishes' || cl.length<2);
+  chips.innerHTML = [`<button class="chip ${!cardsUI.carte?'active':''}" data-val="">Toutes les cartes</button>`]
+    .concat(cl.map(c=>`<button class="chip ${cardsUI.carte===c?'active':''}" data-val="${esc(c)}">${esc(c)}</button>`)).join('');
   const html = groups.filter(([,items])=>items.length).map(([title, items])=>`<div class="carte-section"><h3>${esc(title)}</h3>${items.map(it=>{
     let price = '', detail = '', extra = '';
     if(cardsUI.tab==='dishes'){
@@ -418,15 +446,82 @@ async function renderAdmin(){
   $('admin-demo-fill').classList.toggle('hidden', store.mode!=='demo');
   $('admin-demo-reset').classList.toggle('hidden', store.mode!=='demo');
   renderCardsInfo();
+  renderCartesAdmin();
   drawAdmin();
 }
+function renderCartesAdmin(){
+  const box = $('admin-cartes');
+  if(!app.cards){ box.innerHTML = '<p class="meta-line">Aucune carte publiée pour l\'instant.</p>'; return; }
+  const D = app.cards.data;
+  box.innerHTML = window.QuizExcel.RESTOS.map(R=>`<div class="resto-label">${esc(R.label)}</div>` + E.cartesOf(D, R.id).map((c,i)=>{
+    const n = (D[R.id].dishes||[]).filter(d=>E.dishCarte(d)===c.name).length;
+    return `<label class="carte-toggle"><input type="checkbox" data-r="${R.id}" data-i="${i}" ${c.active!==false?'checked':''}>
+      <span><span class="name">${esc(c.name)}</span> <span class="meta-line">· ${n} plat${n>1?'s':''}</span>${c.desc?`<br><span class="desc">${esc(c.desc)}</span>`:''}</span></label>`;
+  }).join('')).join('');
+  box.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change', ()=> toggleCarte(cb)));
+}
+async function toggleCarte(cb){
+  const D = JSON.parse(JSON.stringify(app.cards.data));
+  if(!D.cartes) D.cartes = { donna: E.cartesOf(D,'donna'), mamiefada: E.cartesOf(D,'mamiefada') };
+  const c = D.cartes[cb.dataset.r][+cb.dataset.i];
+  c.active = cb.checked;
+  const msg = $('admin-cartes-msg');
+  box_disable(true);
+  try{
+    D._savedAt = new Date().toISOString();
+    await store.saveCards(D);
+    app.cards = await store.loadCards();
+    msg.className = 'notice good';
+    msg.textContent = `« ${c.name} » ${c.active ? 'est maintenant en service' : 'n\'est plus en service'}. Les équipes verront le changement à leur prochaine ouverture du quizz.`;
+  }catch(e){
+    console.error(e); cb.checked = !cb.checked;
+    msg.className = 'notice bad'; msg.textContent = 'Changement refusé : ' + e.message;
+  }
+  box_disable(false);
+  renderCartesAdmin(); renderCardsInfo(); drawAdmin();
+}
+function box_disable(on){ $('admin-cartes').querySelectorAll('input').forEach(i=> i.disabled = on); }
+
+// ExcelJS n'est chargé que dans l'espace manager, au premier besoin
+let excelLib = null;
+function loadExcel(){
+  if(window.ExcelJS) return Promise.resolve(window.ExcelJS);
+  if(excelLib) return excelLib;
+  excelLib = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'vendor/exceljs.min.js';
+    s.onload = ()=> res(window.ExcelJS);
+    s.onerror = ()=> { excelLib = null; rej(new Error('Module Excel introuvable')); };
+    document.head.appendChild(s);
+  });
+  return excelLib;
+}
+$('admin-export-btn').addEventListener('click', async ()=>{
+  const btn = $('admin-export-btn');
+  if(!app.cards) return alert('Aucune carte publiée pour l\'instant.');
+  btn.disabled = true; btn.textContent = 'Préparation du fichier…';
+  try{
+    const ExcelJS = await loadExcel();
+    const D = JSON.parse(JSON.stringify(app.cards.data));
+    ['donna','mamiefada'].forEach(r=> (D[r].dishes||[]).forEach(d=>{ d.course = E.courseOf(d); d.carte = E.dishCarte(d); }));
+    const wb = await window.QuizExcel.writeWorkbook(ExcelJS, D);
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Quizz-Cartes_cartes_${new Date().toISOString().slice(0,10)}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  }catch(e){ console.error(e); alert('Export impossible : ' + e.message); }
+  btn.disabled = false; btn.textContent = 'Télécharger les cartes actuelles (Excel)';
+});
 function renderCardsInfo(){
   const el = $('admin-cards-info');
   if(!app.cards){ el.innerHTML = '<b>Aucune carte publiée.</b> Importe le fichier des cartes pour que les équipes puissent jouer.'; return; }
   const D = app.cards.data;
   const n = r => `${D[r].dishes.length} plats, ${D[r].drinks.length} boissons, ${D[r].wines.length} vins`;
   const when = app.cards.updatedAt ? new Date(app.cards.updatedAt).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : '';
-  el.innerHTML = `${esc(D.label || 'Cartes publiées')}${when ? ` — publiée le ${when}` : ''}${app.cards.by ? ` par ${esc(app.cards.by)}` : ''}.<br>DONNA : ${n('donna')}. Mamie Fada : ${n('mamiefada')}.`;
+  el.innerHTML = `Version en ligne : ${esc(D.label || 'cartes publiées')}${when ? ` — publiée le ${when}` : ''}${app.cards.by ? ` par ${esc(app.cards.by)}` : ''}.<br>DONNA : ${n('donna')}. Mamie Fada : ${n('mamiefada')}.`;
 }
 $('admin-resto').addEventListener('click', e=>{ const b = e.target.closest('.choice'); if(!b) return; app.adminResto = b.dataset.val; root.setAttribute('data-scope', app.adminResto); drawAdmin(); });
 
@@ -539,34 +634,65 @@ function drawTeamWeak(rows, resto){
 
 // import des cartes
 $('admin-import-btn').addEventListener('click', ()=> $('admin-import-input').click());
-$('admin-import-input').addEventListener('change', e=>{
+$('admin-import-input').addEventListener('change', async e=>{
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if(!file) return;
   const msg = $('admin-import-msg');
-  const say = (txt, kind) => { msg.className = 'notice ' + (kind||''); msg.innerHTML = txt; };
-  const reader = new FileReader();
-  reader.onload = async ()=>{
-    let d;
-    try{ d = JSON.parse(reader.result); }catch(err){ return say('Ce fichier n\'est pas un fichier de cartes valide (JSON illisible).', 'bad'); }
-    const errs = E.validateCards(d);
-    if(errs.length) return say('<b>Fichier refusé :</b> ' + errs.map(esc).join(' '), 'bad');
-    const summary = r => `${d[r].dishes.length} plats, ${d[r].drinks.length} boissons, ${d[r].wines.length} vins`;
-    if(!confirm(`Publier ces cartes pour toutes les équipes ?\n\nDONNA : ${summary('donna')}\nMamie Fada : ${summary('mamiefada')}\n\nLa progression des équipes est conservée pour tout ce qui n'a pas changé.`)) return;
-    d.version = d.version || new Date().toISOString().slice(0,10);
-    try{
-      say('Publication en cours…');
-      await store.saveCards(d);
-      app.cards = await store.loadCards();
-      say('<b>Cartes publiées.</b> Les équipes les verront à leur prochaine ouverture du quizz.', 'good');
-      renderCardsInfo(); drawAdmin();
-    }catch(err){
-      console.error(err);
-      say('Publication refusée : ' + esc(err.message), 'bad');
+  const say = (html, kind) => { msg.className = 'notice ' + (kind||''); msg.innerHTML = html; };
+  const list = arr => '<ul>' + arr.map(x=>`<li>${esc(x)}</li>`).join('') + '</ul>';
+  let d, warnings = [];
+  try{
+    if(/\.json$/i.test(file.name)){
+      d = JSON.parse(await file.text());
+      const errs = E.validateCards(d);
+      if(errs.length) return say('<b>Fichier refusé :</b>' + list(errs), 'bad');
+    } else {
+      say('Lecture du fichier…');
+      const ExcelJS = await loadExcel();
+      const r = await window.QuizExcel.readWorkbook(ExcelJS, await file.arrayBuffer());
+      if(r.errors.length) return say(`<b>Fichier refusé — ${r.errors.length} erreur${r.errors.length>1?'s':''} à corriger, rien n'a été publié :</b>` + list(r.errors), 'bad');
+      d = r.data; warnings = r.warnings;
     }
-  };
-  reader.readAsText(file);
+  }catch(err){
+    console.error(err);
+    return say('Ce fichier n\'a pas pu être lu. Vérifie qu\'il s\'agit bien du fichier Excel des cartes (.xlsx).', 'bad');
+  }
+  const summary = r => `${d[r].dishes.length} plats, ${d[r].drinks.length} boissons, ${d[r].wines.length} vins, ${((d.vraifaux||{})[r]||[]).length} règles`;
+  const cartesTxt = r => E.cartesOf(d, r).map(c=>`${c.name}${c.active===false?' (hors service)':''}`).join(', ');
+  const diff = app.cards ? diffCards(app.cards.data, d) : null;
+  const text = `Publier ces cartes pour toutes les équipes ?\n\nDONNA : ${summary('donna')}\n   Cartes : ${cartesTxt('donna')}\nMamie Fada : ${summary('mamiefada')}\n   Cartes : ${cartesTxt('mamiefada')}`
+    + (diff ? `\n\nPar rapport à la version en ligne : ${diff}` : '')
+    + (warnings.length ? `\n\nÀ noter :\n- ${warnings.join('\n- ')}` : '');
+  if(!confirm(text)) return say('Import annulé, rien n\'a été publié.');
+  d.version = d.version || new Date().toISOString().slice(0,10);
+  d.label = d.label || `Cartes publiées le ${new Date().toLocaleDateString('fr-FR')}`;
+  d._savedAt = new Date().toISOString();
+  try{
+    say('Publication en cours…');
+    await store.saveCards(d);
+    app.cards = await store.loadCards();
+    say('<b>Cartes publiées.</b> Les équipes les verront à leur prochaine ouverture du quizz.' + (warnings.length ? list(warnings) : ''), 'good');
+    renderCardsInfo(); renderCartesAdmin(); drawAdmin();
+  }catch(err){
+    console.error(err);
+    say('Publication refusée : ' + esc(err.message), 'bad');
+  }
 });
+// résumé des changements (ajouts / retraits / modifications) entre deux versions
+function diffCards(a, b){
+  let add = 0, del = 0, mod = 0;
+  const key = (r,k,x) => r+'|'+k+'|'+(x.section||x.cat||x.category||'')+'|'+x.name;
+  const sig = x => JSON.stringify([x.price,x.accomp,x.sauce,(x.allerg||[]).join(),x.comp,x.cepage,x.region,x.descriptor,x.price12,x.price75,x.carte,x.course]);
+  ['donna','mamiefada'].forEach(r=>['dishes','drinks','wines'].forEach(k=>{
+    const A = new Map(((a[r]||{})[k]||[]).map(x=>[key(r,k,x), sig(x)]));
+    const B = new Map(((b[r]||{})[k]||[]).map(x=>[key(r,k,x), sig(x)]));
+    B.forEach((v,kk)=>{ if(!A.has(kk)) add++; else if(A.get(kk)!==v) mod++; });
+    A.forEach((v,kk)=>{ if(!B.has(kk)) del++; });
+  }));
+  if(!add && !del && !mod) return 'aucun plat, boisson ou vin modifié.';
+  return `${add} ajout${add>1?'s':''}, ${del} retrait${del>1?'s':''}, ${mod} modification${mod>1?'s':''}.`;
+}
 
 // outils démo
 $('admin-demo-fill').addEventListener('click', async ()=>{

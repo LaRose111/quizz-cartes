@@ -87,6 +87,10 @@
           <button class="choice" data-val="vins"><span class="t">Vins</span><span class="d">Cépages, régions &amp; profils sensoriels de la cave</span></button>
         </div>
       </div>
+      <div id="carte-block" class="hidden">
+        <span class="section-label">3. Carte</span>
+        <div class="choice-grid" id="pick-carte"></div>
+      </div>
       <div class="btn-row"><button class="btn" id="start-btn" disabled>Commencer le quizz</button></div>
       <div class="meta-line" id="home-hint">Choisis un restaurant et un mode pour commencer.</div>
       <div id="progress-panel" class="hidden">
@@ -144,6 +148,7 @@
         <button class="choice" data-val="wines"><span class="t">Vins</span></button>
         <button class="choice" data-val="vf"><span class="t">Règlement</span></button>
       </div>
+      <div class="chip-row hidden" id="cards-carte"></div>
       <input type="search" id="cards-search" class="search" placeholder="Rechercher un plat, un ingrédient, un vin…">
       <div id="cards-list"></div>
     </div>
@@ -189,11 +194,20 @@
     </div>
 
     <div class="card stack">
-      <h3>Cartes publiées</h3>
+      <h3>Cartes en service</h3>
+      <p class="meta-line">Seules les cartes cochées sont jouées dans le quizz et visibles par les équipes. Ex. : cocher Braséro au printemps, Fondue en hiver.</p>
+      <div id="admin-cartes"></div>
+      <div class="notice hidden" id="admin-cartes-msg"></div>
+    </div>
+
+    <div class="card stack">
+      <h3>Mettre à jour les cartes</h3>
       <div class="meta-line" id="admin-cards-info">—</div>
+      <p class="meta-line">1. Télécharge le fichier Excel des cartes actuelles. 2. Modifie-le (l'onglet « Lisez-moi » explique les règles). 3. Importe-le : le quizz le vérifie avant de publier.</p>
       <div class="btn-row">
-        <button class="btn" id="admin-import-btn">Importer une nouvelle version des cartes</button>
-        <input type="file" id="admin-import-input" accept="application/json,.json" class="hidden">
+        <button class="btn secondary" id="admin-export-btn">Télécharger les cartes actuelles (Excel)</button>
+        <button class="btn" id="admin-import-btn">Importer le fichier Excel</button>
+        <input type="file" id="admin-import-input" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.json,application/json" class="hidden">
       </div>
       <div class="notice hidden" id="admin-import-msg"></div>
     </div>
@@ -214,6 +228,7 @@
 <script src="config.js"></script>
 <script src="vendor/msal-browser.min.js"></script>
 <script src="engine.js"></script>
+<script src="excel.js"></script>
 <script src="store.js"></script>
 <script src="app.js"></script>
 </body>

@@ -73,13 +73,34 @@ function fuzzyMatch(userInput, correct){
 }
 
 // ---------- périmètre ----------
-function getScopeItems(DATA, restaurant){
+// Cartes d'un restaurant (Classique, Brunch, Braséro…). Fichiers anciens : une seule carte.
+function cartesOf(DATA, r){
+  const list = (DATA.cartes && DATA.cartes[r]) || null;
+  if(list && list.length) return list;
+  return [{ name:'Classique', active:true }];
+}
+function activeCarteNames(DATA, r){ return cartesOf(DATA, r).filter(c=>c.active!==false).map(c=>c.name); }
+function dishCarte(d){ return d.carte || 'Classique'; }
+// carte : null = toutes les cartes en service, sinon le nom d'une carte
+function dishesInScope(DATA, r, carte){
+  const active = activeCarteNames(DATA, r);
+  return (DATA[r].dishes||[]).filter(d=>{
+    const c = dishCarte(d);
+    return active.includes(c) && (!carte || c===carte);
+  });
+}
+function getScopeItems(DATA, restaurant, carte){
   const one = r => ({
-    dishes: (DATA[r].dishes||[]).map(d=>({...d,_origin:r})),
+    dishes: dishesInScope(DATA, r, restaurant==='mixed' ? null : carte).map(d=>({...d,_origin:r})),
     drinks: (DATA[r].drinks||[]).map(d=>({...d,_origin:r})),
     wines: (DATA[r].wines||[]).map(d=>({...d,_origin:r})),
     vf: ((DATA.vraifaux||{})[r]||[]).map(v=>({...v,_origin:r})),
   });
+  // une carte précise choisie : on ne révise que ses plats (boissons, vins et règlement sont communs)
+  if(restaurant!=='mixed' && carte){
+    const o = one(restaurant);
+    return { dishes:o.dishes, drinks:[], wines:o.wines, vf:[] };
+  }
   if(restaurant==='mixed'){
     const a = one('donna'), b = one('mamiefada');
     return { dishes:a.dishes.concat(b.dishes), drinks:a.drinks.concat(b.drinks), wines:a.wines.concat(b.wines), vf:a.vf.concat(b.vf) };
@@ -152,15 +173,17 @@ const SECTION_COURSE = {
   'Végétarien':'Plat', 'Braséro':'Plat', 'Desserts':'Dessert',
 };
 const COURSE_LABEL_PLURAL = { 'Entrée':'Entrées', 'Plat':'Plats', 'Dessert':'Desserts', 'Autre':'Autres' };
-function courseOf(dish){ return SECTION_COURSE[dish.section] || 'Autre'; }
+function courseOf(dish){ return dish.course || SECTION_COURSE[dish.section] || 'Autre'; }
 
 function buildAllergenGridSet(DATA, dishes){
-  const byCourse = {};
-  dishes.forEach(d=>{ const c = courseOf(d); (byCourse[c] = byCourse[c] || []).push(d); });
+  // une grille ne mélange jamais deux moments du repas ni deux cartes
+  const groups = {};
+  dishes.forEach(d=>{ const k = dishCarte(d) + '|' + courseOf(d); (groups[k] = groups[k] || []).push(d); });
   const families = DATA.allergenFamilies || [];
   const out = [];
-  Object.keys(byCourse).forEach(course=>{
-    chunkList(shuffle(byCourse[course]), ALLERGEN_GRID_SIZE).forEach(batch=>{
+  Object.keys(groups).forEach(gk=>{
+    const [carteName, course] = gk.split('|');
+    chunkList(shuffle(groups[gk]), ALLERGEN_GRID_SIZE).forEach(batch=>{
       const trueFamilies = new Set();
       batch.forEach(d=> (d.allerg||[]).forEach(f=>trueFamilies.add(f)));
       let columns = shuffle([...trueFamilies]);
@@ -180,8 +203,9 @@ function buildAllergenGridSet(DATA, dishes){
         }),
       }));
       const label = COURSE_LABEL_PLURAL[course] || course;
+      const carteTag = carteName!=='Classique' ? ` · ${carteName}` : '';
       out.push({
-        type:'allergrid', origin:'mix', kicker:`Allergènes · ${label}`,
+        type:'allergrid', origin:'mix', kicker:`Allergènes · ${label}${carteTag}`,
         text:`Coche, pour chaque plat (${label.toLowerCase()}), la ou les familles d'allergènes qu'il contient (rien à cocher si aucune de la liste).`,
         columns, rows, candidates: rows.flatMap(r=>r.cells),
         points: rows.length * columns.length,
@@ -210,8 +234,8 @@ function buildWineQCMSet(wines, field, fieldLabel){
   return out;
 }
 
-function buildFullPool(DATA, restaurant, mode){
-  const scope = getScopeItems(DATA, restaurant);
+function buildFullPool(DATA, restaurant, mode, carte){
+  const scope = getScopeItems(DATA, restaurant, carte);
   const dishes = scope.dishes.map(d=>({...d,_kind:'dish'}));
   const drinks = scope.drinks.map(d=>({...d,_kind:'drink'}));
   const all = dishes.concat(drinks);
@@ -252,8 +276,8 @@ function weightedSample(items, n){
   keyed.sort((a,b)=> b.key-a.key);
   return keyed.slice(0,n).map(k=>k.it);
 }
-function buildRound(DATA, restaurant, mode, facts){
-  const { pool, cap } = buildFullPool(DATA, restaurant, mode);
+function buildRound(DATA, restaurant, mode, facts, carte){
+  const { pool, cap } = buildFullPool(DATA, restaurant, mode, carte);
   pool.forEach(q=>{
     if(q.factId){ q._w = factWeight(facts, q.factId); return; }
     if(q.candidates){
@@ -268,25 +292,26 @@ function buildRound(DATA, restaurant, mode, facts){
 
 // Toutes les infos d'un périmètre, avec un libellé lisible (pour l'espace manager).
 const _factCache = new Map();
-function factsFor(DATA, restaurant, mode){
-  const cacheKey = (DATA.version||'') + '|' + restaurant + '|' + mode;
+function factsFor(DATA, restaurant, mode, carte){
+  const actives = ['donna','mamiefada'].map(r=>activeCarteNames(DATA, r).join('+')).join('/');
+  const cacheKey = (DATA.version||'') + '|' + (DATA._savedAt||'') + '|' + actives + '|' + restaurant + '|' + mode + '|' + (carte||'');
   if(_factCache.has(cacheKey)) return _factCache.get(cacheKey);
   const map = new Map(); // clé courte -> libellé
   if(mode==='allergenes'){
     // énumération exhaustive (la grille tirée au hasard peut couper des colonnes)
-    getScopeItems(DATA, restaurant).dishes.forEach(d=>{
+    getScopeItems(DATA, restaurant, carte).dishes.forEach(d=>{
       (d.allerg||[]).forEach(fam=> map.set(factKey(`allergen|${fam}|${d._origin}|${d.name}`), `${d.name} contient : ${fam}`));
     });
   } else {
-    buildFullPool(DATA, restaurant, mode).pool.forEach(q=>{
+    buildFullPool(DATA, restaurant, mode, carte).pool.forEach(q=>{
       if(q.factId) map.set(factKey(q.factId), q.type==='vf' ? `${q.text} → ${q.correct}` : q.explain);
     });
   }
   _factCache.set(cacheKey, map);
   return map;
 }
-function coverage(DATA, restaurant, mode, facts){
-  const map = factsFor(DATA, restaurant, mode);
+function coverage(DATA, restaurant, mode, facts, carte){
+  const map = factsFor(DATA, restaurant, mode, carte);
   let mastered = 0, seen = 0;
   map.forEach((_, key)=>{
     const f = facts[key];
@@ -328,5 +353,6 @@ window.QuizEngine = {
   POINTS, euro, strHash, factKey, escapeHtml, fuzzyMatch, normalize,
   buildRound, buildFullPool, factsFor, coverage, isMastered,
   encodeFacts, decodeFacts, validateCards, courseOf,
+  cartesOf, activeCarteNames, dishCarte, dishesInScope,
 };
 })();

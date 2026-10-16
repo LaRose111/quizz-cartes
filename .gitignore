@@ -1,3 +1,4 @@
 # Les cartes ne vont JAMAIS dans ce dépôt public : elles sont publiées depuis l'espace manager
 cartes*.json
 data.json
+*.xlsx
